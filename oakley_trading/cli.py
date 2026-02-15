@@ -420,6 +420,294 @@ def cmd_positions(args):
     print(truncate_for_telegram("\n".join(lines)))
 
 
+def cmd_check_exits(args):
+    from oakley_trading.common import truncate_for_telegram, format_section_header
+    from oakley_trading import risk
+
+    result = risk.check_exit_conditions()
+
+    lines = [
+        format_section_header("Exit Check"),
+        "",
+        f"Positions checked: {result['checked']}",
+        f"Positions closed: {result['closed']}",
+    ]
+    if result["errors"]:
+        lines.append(f"Errors: {result['errors']}")
+
+    for d in result["details"]:
+        if d.get("error"):
+            lines.append(f"  {d['symbol']}: ERROR - {d['error']}")
+        elif d.get("closed"):
+            lines.append(f"  {d['symbol']}: CLOSED ({d['reason']}) @ ${d['current_price']:,.2f}")
+        else:
+            parts = [f"${d['current_price']:,.2f}"]
+            if d.get("highest_price_updated"):
+                parts.append(f"new high ${d['highest_price_updated']:,.2f}")
+            if d.get("trailing_stop_updated"):
+                parts.append(f"trail ${d['trailing_stop_updated']:,.2f}")
+            lines.append(f"  {d['symbol']}: OK - {', '.join(parts)}")
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
+def cmd_risk(args):
+    from oakley_trading.common import truncate_for_telegram, format_section_header
+    from oakley_trading import risk
+
+    status = risk.get_risk_status()
+
+    halt_str = "YES - TRADING HALTED" if status["halted"] else "No"
+
+    lines = [
+        format_section_header("Risk Status"),
+        "",
+        f"Halted: {halt_str}",
+        f"Open positions: {status['open_positions']}",
+        f"Total equity: ${status['total_equity']:,.2f}",
+        f"Exposure: {status['exposure_pct']:.1f}% / {status['max_exposure_pct']:.0f}% max",
+        "",
+        f"Stop-loss type: {status['stop_loss_type']}",
+        f"Default stop-loss: {status['default_stop_loss_pct']:.1f}%",
+        f"Default trailing stop: {status['default_trailing_stop_pct']:.1f}%",
+        f"Trailing stops enabled: {status['enable_trailing_stops']}",
+    ]
+
+    if status["positions"]:
+        lines.append("")
+        for p in status["positions"]:
+            stop_info = ""
+            if p.get("distance_to_stop_pct") is not None:
+                stop_info = f" | {p['distance_to_stop_pct']:.1f}% to stop"
+            lines.append(f"  {p['symbol']}: ${p['value']:,.2f}{stop_info}")
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
+def cmd_halt(args):
+    from oakley_trading import risk
+    result = risk.halt()
+    print(result["message"])
+
+
+def cmd_resume(args):
+    from oakley_trading import risk
+    result = risk.resume()
+    print(result["message"])
+
+
+def cmd_performance(args):
+    from oakley_trading.common import truncate_for_telegram, format_currency, format_section_header
+    from oakley_trading import analytics
+
+    period = args.period or "30d"
+    symbol = None
+    if args.symbol:
+        symbol = args.symbol.upper()
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+
+    perf = analytics.get_performance(period, symbol=symbol)
+
+    title = f"Performance ({period})"
+    if symbol:
+        title += f" — {symbol}"
+    lines = [format_section_header(title), ""]
+
+    if perf["total_trades"] == 0:
+        lines.append("No closed trades in this period.")
+        print("\n".join(lines))
+        return
+
+    win_rate = f"{perf['win_rate']:.1f}%"
+    pnl_sign = "+" if perf["total_pnl"] >= 0 else ""
+
+    lines.extend([
+        f"Trades: {perf['total_trades']} ({perf['winning']}W / {perf['losing']}L)",
+        f"Win rate: {win_rate}",
+        f"Total P&L: {pnl_sign}{format_currency(perf['total_pnl'])}",
+        f"Total fees: {format_currency(perf['total_fees'])}",
+        f"Net P&L: {pnl_sign}{format_currency(perf['net_pnl'])}",
+        "",
+        f"Avg win: {format_currency(perf['avg_win'])}",
+        f"Avg loss: {format_currency(perf['avg_loss'])}",
+        f"Profit factor: {perf['profit_factor']:.2f}",
+    ])
+
+    if perf["avg_holding_hours"] > 0:
+        if perf["avg_holding_hours"] >= 24:
+            lines.append(f"Avg hold: {perf['avg_holding_hours'] / 24:.1f} days")
+        else:
+            lines.append(f"Avg hold: {perf['avg_holding_hours']:.1f} hours")
+
+    if perf["best_trade"]:
+        lines.append(f"Best: {perf['best_trade']['symbol']} +{format_currency(perf['best_trade']['pnl'])} ({perf['best_trade']['pnl_percent']:+.1f}%)")
+    if perf["worst_trade"]:
+        lines.append(f"Worst: {perf['worst_trade']['symbol']} {format_currency(perf['worst_trade']['pnl'])} ({perf['worst_trade']['pnl_percent']:+.1f}%)")
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
+def cmd_analytics(args):
+    from oakley_trading.common import truncate_for_telegram, format_currency, format_section_header
+    from oakley_trading import analytics
+
+    period = args.period or "30d"
+    data = analytics.get_full_analytics(period)
+    perf = data["performance"]
+
+    lines = [format_section_header(f"Analytics Dashboard ({period})"), ""]
+
+    # Summary
+    if perf["total_trades"] == 0:
+        lines.append("No closed trades in this period.")
+        print("\n".join(lines))
+        return
+
+    pnl_sign = "+" if perf["total_pnl"] >= 0 else ""
+    lines.extend([
+        f"Trades: {perf['total_trades']} ({perf['winning']}W / {perf['losing']}L) | Win rate: {perf['win_rate']:.1f}%",
+        f"P&L: {pnl_sign}{format_currency(perf['total_pnl'])} (net: {pnl_sign}{format_currency(perf['net_pnl'])})",
+        f"Profit factor: {perf['profit_factor']:.2f} | Sharpe: {data['sharpe_ratio']:.2f}",
+    ])
+
+    # Per-asset breakdown
+    if data["asset_breakdown"]:
+        lines.extend(["", format_section_header("By Asset")])
+        for a in data["asset_breakdown"]:
+            pnl_s = "+" if a["total_pnl"] >= 0 else ""
+            lines.append(
+                f"  {a['symbol']}: {a['trades']}t | "
+                f"{a['win_rate']:.0f}% WR | "
+                f"{pnl_s}{format_currency(a['total_pnl'])}"
+            )
+
+    # Exit reason breakdown
+    if data["exit_reasons"]:
+        lines.extend(["", format_section_header("By Exit Reason")])
+        for e in data["exit_reasons"]:
+            pnl_s = "+" if e["total_pnl"] >= 0 else ""
+            lines.append(
+                f"  {e['reason']}: {e['trades']}t | "
+                f"{e['win_rate']:.0f}% WR | "
+                f"{pnl_s}{format_currency(e['total_pnl'])}"
+            )
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
+def cmd_reconcile(args):
+    from oakley_trading.common import truncate_for_telegram, format_section_header, format_currency
+    from oakley_trading import reconciliation
+
+    result = reconciliation.reconcile()
+
+    if not result["success"]:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    lines = [
+        format_section_header("Reconciliation Report"),
+        "",
+        f"Open trades checked: {result['open_trades_checked']}",
+        f"Exchange assets checked: {result['exchange_assets_checked']}",
+        f"Issues found: {result['total_issues']}",
+    ]
+
+    if not result["total_issues"]:
+        lines.append("")
+        lines.append("All clear — DB matches exchange.")
+        print(truncate_for_telegram("\n".join(lines)))
+        return
+
+    if result["zombies"]:
+        lines.extend(["", format_section_header("Zombies (DB open, no exchange balance)")])
+        for z in result["zombies"]:
+            lines.append(
+                f"  {z['symbol']} (trade {z['trade_id']}): "
+                f"DB qty {z['db_quantity']:.6f}, exchange {z['exchange_balance']:.6f}"
+            )
+
+    if result["orphans"]:
+        lines.extend(["", format_section_header("Orphans (exchange balance, no DB record)")])
+        for o in result["orphans"]:
+            lines.append(
+                f"  {o['asset']} ({o['symbol']}): "
+                f"{o['exchange_balance']:.6f} (~{format_currency(o['estimated_value_usdt'])})"
+            )
+
+    if result["mismatches"]:
+        lines.extend(["", format_section_header("Quantity Mismatches")])
+        for m in result["mismatches"]:
+            sign = "+" if m["difference"] >= 0 else ""
+            lines.append(
+                f"  {m['symbol']} (trade {m['trade_id']}): "
+                f"DB {m['db_quantity']:.6f} vs exchange {m['exchange_balance']:.6f} "
+                f"({sign}{m['difference_pct']:.1f}%)"
+            )
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
+def cmd_recovery(args):
+    from oakley_trading.common import truncate_for_telegram, format_section_header
+    from oakley_trading import db as trade_db
+
+    # --clear mode
+    if args.clear is not None:
+        success = trade_db.clear_recovery_item(args.clear)
+        if success:
+            print(f"Recovery item {args.clear} removed.")
+        else:
+            print(f"Error: Recovery item {args.clear} not found.", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    # --retry mode
+    if args.retry:
+        from oakley_trading import reconciliation
+        result = reconciliation.retry_all_recovery()
+
+        lines = [
+            format_section_header("Recovery Retry"),
+            "",
+            f"Items processed: {result['total']}",
+            f"Succeeded: {result['succeeded']}",
+            f"Failed: {result['failed']}",
+        ]
+
+        if not result["total"]:
+            lines.append("")
+            lines.append("Recovery queue is empty.")
+
+        for d in result["details"]:
+            status = "OK" if d["result"]["success"] else f"FAILED — {d['result']['reason']}"
+            lines.append(f"  #{d['id']} ({d['reason']}): {status}")
+
+        print(truncate_for_telegram("\n".join(lines)))
+        return
+
+    # Default: list queue
+    items = trade_db.get_recovery_queue()
+    if not items:
+        print("Recovery queue is empty.")
+        return
+
+    lines = [format_section_header(f"Recovery Queue ({len(items)} items)"), ""]
+    for item in items:
+        trade_data = item["trade_data"]
+        trade_id = ""
+        if isinstance(trade_data, dict):
+            trade_id = trade_data.get("trade_id", "")
+        lines.append(f"  #{item['id']} | {item['reason']}")
+        if trade_id:
+            lines.append(f"    Trade: {trade_id}")
+        lines.append(f"    Created: {item['created_at']}")
+        lines.append("")
+
+    print(truncate_for_telegram("\n".join(lines)))
+
+
 def cmd_config(args):
     from oakley_trading import db as trade_db
 
@@ -435,6 +723,9 @@ def cmd_config(args):
                 "max_portfolio_exposure": str(Config.max_portfolio_exposure),
                 "risk_per_trade": str(Config.risk_per_trade),
                 "min_trade_usdt": str(Config.min_trade_usdt),
+                "stop_loss_type": str(Config.stop_loss_type),
+                "stop_loss_atr_multiplier": str(Config.stop_loss_atr_multiplier),
+                "enable_trailing_stops": str(Config.enable_trailing_stops),
             }
             lines = ["Defaults:"]
             for k, v in defaults.items():
@@ -532,6 +823,35 @@ def main():
     positions_parser = subparsers.add_parser("positions", help="Show open positions")
     positions_parser.add_argument("--symbol", default=None, help="Filter by symbol")
 
+    # check-exits
+    subparsers.add_parser("check-exits", help="Check stop-loss/trailing-stop, auto-close if triggered")
+
+    # risk
+    subparsers.add_parser("risk", help="Risk dashboard: exposure, positions, halt state")
+
+    # performance
+    perf_parser = subparsers.add_parser("performance", help="Performance metrics (win rate, P&L, profit factor)")
+    perf_parser.add_argument("--period", default="30d", help="Time period (1d, 7d, 30d, 90d, all)")
+    perf_parser.add_argument("--symbol", default=None, help="Filter by symbol")
+
+    # analytics
+    analytics_parser = subparsers.add_parser("analytics", help="Full analytics dashboard with per-asset breakdown")
+    analytics_parser.add_argument("--period", default="30d", help="Time period (1d, 7d, 30d, 90d, all)")
+
+    # halt
+    subparsers.add_parser("halt", help="Halt all trading (emergency)")
+
+    # resume
+    subparsers.add_parser("resume", help="Resume trading after halt")
+
+    # reconcile
+    subparsers.add_parser("reconcile", help="Compare DB state vs Binance exchange state")
+
+    # recovery
+    recovery_parser = subparsers.add_parser("recovery", help="View/retry/clear recovery queue")
+    recovery_parser.add_argument("--retry", action="store_true", help="Retry all failed items")
+    recovery_parser.add_argument("--clear", type=int, default=None, metavar="ID", help="Remove item by ID")
+
     args = parser.parse_args()
 
     commands = {
@@ -548,6 +868,14 @@ def main():
         "close": cmd_close,
         "portfolio": cmd_portfolio,
         "positions": cmd_positions,
+        "check-exits": cmd_check_exits,
+        "risk": cmd_risk,
+        "performance": cmd_performance,
+        "analytics": cmd_analytics,
+        "halt": cmd_halt,
+        "resume": cmd_resume,
+        "reconcile": cmd_reconcile,
+        "recovery": cmd_recovery,
     }
 
     if args.command in commands:

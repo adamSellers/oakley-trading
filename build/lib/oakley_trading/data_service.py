@@ -177,6 +177,29 @@ def get_account() -> dict:
         return {"balances": [], "error": str(e)}
 
 
+def calculate_atr(symbol: str, period: int = 14, interval: str = "1d") -> Optional[float]:
+    """Calculate Average True Range from candle data.
+
+    True Range = max(high-low, |high-prev_close|, |low-prev_close|)
+    ATR = SMA of True Range over `period` candles.
+
+    Returns ATR value or None if insufficient data.
+    """
+    candles = get_candles(symbol, interval, limit=period + 1)
+    if len(candles) < period + 1:
+        return None
+
+    true_ranges = []
+    for i in range(1, len(candles)):
+        high = candles[i]["high"]
+        low = candles[i]["low"]
+        prev_close = candles[i - 1]["close"]
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        true_ranges.append(tr)
+
+    return sum(true_ranges[-period:]) / period
+
+
 def execute_order(symbol: str, side: str, quantity: float) -> dict:
     """Execute a market order. Returns Binance order response."""
     client = get_client()

@@ -126,7 +126,7 @@ def update_trade(trade_id: str, updates: dict) -> None:
     allowed = {
         "exit_price", "exit_time", "pnl", "pnl_percent", "fee_usdt_value",
         "stop_loss", "trailing_stop_price", "highest_price", "trailing_stop_pct",
-        "exit_reason", "is_open", "holding_period", "entry_type",
+        "exit_reason", "is_open", "holding_period", "entry_type", "atr",
     }
     sets = []
     values = []

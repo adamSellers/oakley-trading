@@ -37,6 +37,9 @@ MAX_CAPITAL_AT_RISK = 999999       # No cap by default
 RISK_PER_TRADE = 0.98              # 98% of allocation (2% buffer)
 MIN_TRADE_USDT = 10                # Binance minimum notional
 CASH_BUFFER = 0.01                 # 1% cash buffer when constrained
+STOP_LOSS_TYPE = "FIXED"           # FIXED or ATR
+STOP_LOSS_ATR_MULTIPLIER = 1.5     # ATR multiplier for ATR-based stop-loss
+ENABLE_TRAILING_STOPS = True       # Whether check-exits enforces trailing stops
 
 
 class Config:
@@ -68,6 +71,9 @@ class Config:
     risk_per_trade = RISK_PER_TRADE
     min_trade_usdt = MIN_TRADE_USDT
     cash_buffer = CASH_BUFFER
+    stop_loss_type = STOP_LOSS_TYPE
+    stop_loss_atr_multiplier = STOP_LOSS_ATR_MULTIPLIER
+    enable_trailing_stops = ENABLE_TRAILING_STOPS
 
     @classmethod
     def ensure_dirs(cls):

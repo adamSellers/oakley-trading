@@ -201,7 +201,19 @@ def buy(
     quantity = trade_amount / current_price
 
     # Calculate stop levels
-    stop_loss_price = current_price * (1 - sl_pct)
+    stop_loss_type = (trade_db.get_config_value("stop_loss_type") or Config.stop_loss_type).upper()
+    atr_value = None
+
+    if stop_loss_type == "ATR":
+        atr_multiplier = _get_effective_config("stop_loss_atr_multiplier")
+        atr_value = data_service.calculate_atr(symbol)
+        if atr_value is not None:
+            stop_loss_price = current_price - (atr_value * atr_multiplier)
+        else:
+            stop_loss_price = current_price * (1 - sl_pct)
+    else:
+        stop_loss_price = current_price * (1 - sl_pct)
+
     trailing_stop_price = current_price * (1 - ts_pct) if ts_pct > 0 else None
 
     if dry_run:
@@ -220,6 +232,8 @@ def buy(
             "highest_price": current_price,
             "entry_type": entry_type,
             "allocation_used": alloc,
+            "atr": atr_value,
+            "stop_loss_type": stop_loss_type,
         }
         return {"success": True, "trade": trade_info, "dry_run": True}
 
@@ -240,7 +254,10 @@ def buy(
     entry_fee = calculate_order_fee(order)
 
     # Recalculate stops with actual entry price
-    stop_loss_price = entry_price * (1 - sl_pct)
+    if stop_loss_type == "ATR" and atr_value is not None:
+        stop_loss_price = entry_price - (atr_value * atr_multiplier)
+    else:
+        stop_loss_price = entry_price * (1 - sl_pct)
     trailing_stop_price = entry_price * (1 - ts_pct) if ts_pct > 0 else None
 
     trade_record = {
@@ -258,6 +275,7 @@ def buy(
         "highest_price": entry_price,
         "trailing_stop_pct": ts_pct,
         "entry_type": entry_type,
+        "atr": atr_value,
         "is_open": True,
         "timestamp": int(time.time() * 1000),
     }
