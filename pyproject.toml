@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oakley-trading"
+version = "0.1.0"
+description = "Agent-directed crypto trading CLI — Binance execution, position management, risk controls & analytics"
+requires-python = ">=3.8"
+dependencies = [
+    "python-binance>=1.0.19",
+    "pytz>=2023.3",
+]
+
+[project.scripts]
+oakley-trading = "oakley_trading.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["oakley_trading*"]

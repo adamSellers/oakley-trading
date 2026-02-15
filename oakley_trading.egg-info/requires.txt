@@ -1,0 +1,2 @@
+python-binance>=1.0.19
+pytz>=2023.3

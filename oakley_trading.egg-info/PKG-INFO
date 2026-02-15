@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: oakley-trading
+Version: 0.1.0
+Summary: Agent-directed crypto trading CLI — Binance execution, position management, risk controls & analytics
+Requires-Python: >=3.8
+Requires-Dist: python-binance>=1.0.19
+Requires-Dist: pytz>=2023.3
